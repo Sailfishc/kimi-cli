@@ -1,4 +1,4 @@
-# Kimi CLI
+# Kimi Code CLI
 
 ## Quick commands (use uv)
 
@@ -13,7 +13,7 @@ If running tools directly, use `uv run ...`.
 
 ## Project overview
 
-Kimi CLI is a Python CLI agent for software engineering workflows. It supports an interactive
+Kimi Code CLI is a Python CLI agent for software engineering workflows. It supports an interactive
 shell UI, ACP server mode for IDE integrations, and MCP tool loading.
 
 ## Tech stack
@@ -58,8 +58,8 @@ shell UI, ACP server mode for IDE integrations, and MCP tool loading.
   and slash command autocomplete; it is the default interactive experience.
 - **Slash commands**: Soul-level commands live in `src/kimi_cli/soul/slash.py`; shell-level
   commands live in `src/kimi_cli/ui/shell/slash.py`. The shell UI exposes both and dispatches
-  based on the registry. Skills are registered as soul-level commands; running
-  `/skill:<skill-name>` loads the skill's `SKILL.md` as a user prompt.
+  based on the registry. Standard skills register `/skill:<skill-name>` and load `SKILL.md`
+  as a user prompt; flow skills register `/flow:<skill-name>` and execute the embedded flow.
 
 ## Major modules and interfaces
 
@@ -84,7 +84,14 @@ shell UI, ACP server mode for IDE integrations, and MCP tool loading.
 - `src/kimi_cli/ui/`: UI frontends (shell/print/acp/wire)
 - `src/kimi_cli/acp/`: ACP server components
 - `packages/kosong/`, `packages/kaos/`: workspace deps
+  + Kosong is an LLM abstraction layer designed for modern AI agent applications.
+    It unifies message structures, asynchronous tool orchestration, and pluggable
+    chat providers so you can build agents with ease and avoid vendor lock-in.
+  + PyKAOS is a lightweight Python library providing an abstraction layer for agents
+    to interact with operating systems. File operations and command executions via KAOS
+    can be easily switched between local environment and remote systems over SSH.
 - `tests/`, `tests_ai/`: test suites
+- `klips`: Kimi Code CLI Improvement Proposals
 
 ## Conventions and quality
 
@@ -104,6 +111,20 @@ Conventional Commits format:
 
 Allowed types:
 `feat`, `fix`, `test`, `refactor`, `chore`, `style`, `docs`, `perf`, `build`, `ci`, `revert`.
+
+## Versioning
+
+The project follows a **minor-bump-only** versioning scheme (`MAJOR.MINOR.PATCH`):
+
+- **Patch** version is always `0`. Never bump it.
+- **Minor** version is bumped for any change: new features, improvements, bug fixes, etc.
+- **Major** version is only changed by explicit manual decision; it stays unchanged during
+  normal development.
+
+Examples: `0.68.0` → `0.69.0` → `0.70.0`; never `0.68.1`.
+
+This rule applies to all packages in the repo (root, `packages/*`, `sdks/*`) as well as release
+and skill workflows.
 
 ## Release workflow
 

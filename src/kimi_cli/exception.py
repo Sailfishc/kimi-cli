@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 class KimiCLIException(Exception):
-    """Base exception class for Kimi CLI."""
+    """Base exception class for Kimi Code CLI."""
 
     pass
 
@@ -21,6 +21,12 @@ class AgentSpecError(KimiCLIException, ValueError):
 
 class InvalidToolError(KimiCLIException, ValueError):
     """Invalid tool error."""
+
+    pass
+
+
+class SystemPromptTemplateError(KimiCLIException, ValueError):
+    """System prompt template error."""
 
     pass
 

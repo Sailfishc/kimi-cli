@@ -1,18 +1,17 @@
 # Keyboard Shortcuts
 
-Kimi CLI shell mode supports the following keyboard shortcuts.
+Kimi Code CLI shell mode supports the following keyboard shortcuts.
 
 ## Shortcuts list
 
 | Shortcut | Function |
 |----------|----------|
 | `Ctrl-X` | Toggle agent/shell mode |
-| `Ctrl-/` | Show help |
 | `Ctrl-J` | Insert newline |
 | `Alt-Enter` | Insert newline (same as `Ctrl-J`) |
 | `Ctrl-V` | Paste (supports images) |
 | `Ctrl-E` | Expand full approval request content |
-| `Ctrl-D` | Exit Kimi CLI |
+| `Ctrl-D` | Exit Kimi Code CLI |
 | `Ctrl-C` | Interrupt current operation |
 
 ## Mode switching
@@ -27,10 +26,6 @@ Press `Ctrl-X` in the input box to switch between two modes:
 The prompt changes based on current mode:
 - Agent mode: `✨` (normal) or `💫` (thinking mode)
 - Shell mode: `$`
-
-### `Ctrl-/`: Show help
-
-Press `Ctrl-/` in the input box to quickly display help information, equivalent to entering the `/help` command.
 
 ## Multi-line input
 
@@ -70,12 +65,13 @@ Useful for viewing longer shell commands or file diff content.
 
 ### `Ctrl-D`: Exit
 
-Press `Ctrl-D` when the input box is empty to exit Kimi CLI.
+Press `Ctrl-D` when the input box is empty to exit Kimi Code CLI.
 
 ### `Ctrl-C`: Interrupt
 
 - In input box: Clear current input
 - During agent execution: Interrupt current operation
+- During slash command execution: Interrupt command
 
 ## Completion operations
 

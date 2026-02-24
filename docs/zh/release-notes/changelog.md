@@ -1,8 +1,199 @@
 # 变更记录
 
-本页面记录 Kimi CLI 各版本的变更内容。
+本页面记录 Kimi Code CLI 各版本的变更内容。
 
 ## 未发布
+
+## 1.13.0 (2026-02-24)
+
+- Core：添加自动连接恢复机制，在连接错误和超时错误时重建 HTTP 客户端并重试，提升对瞬时网络故障的容错能力
+
+## 1.12.0 (2026-02-11)
+
+- Web：添加子 Agent 活动渲染，在 Task 工具消息中展示子 Agent 步骤（思考、工具调用、文本）
+- Web：添加 Think 工具渲染，以轻量级推理风格块展示
+- Web：将 emoji 状态指示器替换为 Lucide 图标，并为工具名称添加分类图标
+- Web：改进 Reasoning 组件，优化思考标签和状态图标
+- Web：改进 Todo 组件，添加状态图标并优化样式
+- Web：实现 WebSocket 断线重连，支持自动重发请求和连接超时监控
+- Web：改进创建会话对话框的命令值处理
+- Web：支持会话工作目录路径中的波浪号（`~`）展开
+- Web：修复 Assistant 消息内容溢出被裁剪的问题
+- Wire：修复多个子 Agent 并发运行时的死锁问题，不再在审批请求和工具调用请求上阻塞 UI 循环
+- Wire：Agent 轮次结束后清理残留的待处理请求
+- Web：在提示输入框中显示引导占位文本，提示可使用斜杠命令和 @ 引用文件
+- Web：修复在 uvicorn Web 服务器中 Ctrl+C 无法使用的问题，在 Shell 模式退出后恢复默认的 SIGINT 信号处理程序和终端状态
+- Web：改进会话停止处理，使用正确的异步清理和超时机制
+
+## 1.11.0 (2026-02-10)
+
+- Web：将上下文用量指示器从工作区标题栏移至提示工具栏，悬停时显示详细的 Token 用量明细
+- Web：在文件变更面板底部添加文件夹指示器，显示工作目录路径
+- Web：修复切换到 Web 模式时未恢复 stderr 的问题，该问题可能导致 Web 服务器的错误输出被抑制
+- Web：修复端口可用性检查，在测试套接字上设置 SO_REUSEADDR
+
+## 1.10.0 (2026-02-09)
+
+- Web：为 Assistant 消息添加复制和分支(fork)操作按钮，支持快速复制内容和创建分支会话
+- Web：为审批操作添加键盘快捷键——按 `1` 批准、`2` 本次会话批准、`3` 拒绝
+- Web：添加消息队列功能——在 AI 处理过程中可排队发送后续消息，待当前回复完成后自动发送
+- Web：将 Git diff 状态栏替换为统一的提示工具栏，以可折叠标签页展示活动状态、消息队列和文件变更
+- Web：在 Web Worker 中加载全局 MCP 配置，使 Web 会话可以使用 MCP 工具
+- Web：改进移动端提示输入框体验——缩小 textarea 最小高度、添加 `autoComplete="off"`、在小屏幕上禁用聚焦边框
+- Web：处理部分模型先输出文本再输出思考过程的情况，确保思考消息始终显示在文本消息之前
+- Web：在会话连接过程中显示更具体的状态信息（"Loading history..."、"Starting environment..." 替代通用的 "Connecting..."）
+- Web：会话环境初始化失败时发送错误状态，而非让 UI 一直处于等待状态
+- Web：历史回放完成后 15 秒内未收到会话状态时自动重连
+- Web：会话流中使用非阻塞文件 I/O，避免历史回放期间阻塞事件循环
+
+## 1.9.0 (2026-02-06)
+
+- Config：添加 `default_yolo` 配置项，支持默认开启 YOLO（自动审批）模式
+- Config：支持 `max_steps_per_turn` 和 `max_steps_per_run` 作为循环控制设置的别名
+- Wire：新增 `replay` 请求，用于回放已记录的 Wire 事件（协议版本 1.3）
+- Web：添加会话分支(fork)功能，可以从任意 Assistant 回复处创建新的分支会话
+- Web：添加会话归档功能，自动归档超过 15 天的会话
+- Web：添加多选模式，支持批量归档、取消归档和删除操作
+- Web：添加工具结果的媒体预览（ReadMediaFile 的图片/视频），支持可点击缩略图
+- Web：添加 Shell 命令和 Todo 列表的工具输出显示组件
+- Web：添加活动状态指示器，显示 Agent 状态（处理中、等待审批等）
+- Web：添加图片加载失败时的错误回退 UI
+- Web：重新设计工具输入 UI，支持可展开参数和长值的语法高亮
+- Web：上下文压缩时显示压缩指示器
+- Web：改进聊天中的自动滚动行为，更流畅地跟随新内容
+- Web：会话流开始时更新工作目录的最近会话 ID（`last_session_id`）
+- Shell：移除 `Ctrl-/` 快捷键（此前用于触发 `/help` 命令）
+- Rust：Rust 版实现迁移到 `MoonshotAI/kimi-agent-rs` 并独立发版；二进制更名为 `kimi-agent`
+- Core：重新加载配置时保留会话 ID，确保会话正确恢复
+- Shell：修复会话回放时显示已被 `/clear` 或 `/reset` 清除的消息的问题
+- Web：修复会话中断或取消时审批请求状态未更新的问题
+- Web：修复选择斜杠命令时的输入法组合问题
+- Web：修复执行 `/clear`、`/reset` 或 `/compact` 命令后 UI 未清空消息的问题
+
+## 1.8.0 (2026-02-05)
+
+- CLI：修复启动错误（如无效的配置文件）被静默吞掉而不显示的问题
+
+## 1.7.0 (2026-02-05)
+
+- Rust：添加 `kagent`，Kimi Agent 内核的 Rust 实现，支持 Wire 模式（实验性）
+- Auth：修复多个会话同时运行时的 OAuth 令牌刷新冲突
+- Web：添加文件提及菜单（`@`），支持引用已上传附件和工作区文件，带自动补全功能
+- Web：添加斜杠命令菜单，支持自动补全、键盘导航和别名匹配
+- Web：修复认证令牌持久化问题，从 sessionStorage 切换到 localStorage 并设置 24 小时过期
+- Web：创建会话时，若指定的路径不存在则提示创建目录
+- Web：为会话列表添加服务端分页和虚拟滚动，提升性能
+- Web：改进会话和工作目录加载，采用更智能的缓存和失效策略
+- Web：修复历史记录回放时的 WebSocket 错误，发送前检查连接状态
+- Web：Git diff 状态栏现在显示未跟踪文件（尚未添加到 git 的新文件）
+- Web：仅在 public 模式下限制敏感 API；更新 origin 执行逻辑
+
+## 1.6 (2026-02-03)
+
+- Web：为网络模式添加基于 Token 的认证和访问控制（`--network`、`--lan-only`、`--public`）
+- Web：添加安全选项：`--auth-token`、`--allowed-origins`、`--restrict-sensitive-apis`、`--dangerously-omit-auth`
+- Web：变更 `--host` 选项，用于绑定到指定 IP 地址；添加自动网络地址检测
+- Web：修复创建新会话时 WebSocket 断开连接的问题
+- Web：将最大图片尺寸从 1024 提升至 4096 像素
+- Web：通过增强的悬停效果和更好的布局处理改进 UI 响应性
+- Wire：添加 `TurnEnd` 事件，用于标识 Agent 轮次的完成（协议版本 1.2）
+- Core：修复包含 `$` 的自定义 Agent 提示词文件导致静默启动失败的问题
+
+## 1.5 (2026-01-30)
+
+- Web：添加 Git diff 状态栏，显示会话工作目录中的未提交更改
+- Web：添加 "Open in" 菜单，用于在终端、VS Code、Cursor 或其他本地应用中打开文件/目录
+- Web：添加会话搜索功能，支持按标题或工作目录过滤会话
+- Web：改进会话标题显示，优化溢出处理
+
+## 1.4 (2026-01-30)
+
+- Shell：合并 `/login` 和 `/setup` 命令，`/setup` 现为 `/login` 的别名
+- Shell：`/usage` 命令现在显示剩余配额百分比；添加 `/status` 别名
+- Config：添加 `KIMI_SHARE_DIR` 环境变量，用于自定义共享目录路径（默认 `~/.kimi`）
+- Web：新增 Web UI，支持基于浏览器的交互
+- CLI：添加 `kimi web` 子命令以启动 Web UI 服务器
+- Auth：修复设备名称或操作系统版本包含非 ASCII 字符时的编码错误
+- Auth：OAuth 凭据现在存储在文件中而非 keyring；启动时自动迁移现有令牌
+- Auth：修复系统休眠或睡眠后的授权失败问题
+
+## 1.3 (2026-01-28)
+
+- Auth：修复 Agent 轮次期间的认证问题
+- Tool：为 `ReadMediaFile` 中的媒体内容添加描述性标签，提高路径可追溯性
+
+## 1.2 (2026-01-27)
+
+- UI：显示 `kimi-for-coding` 模型的说明
+
+## 1.1 (2026-01-27)
+
+- LLM：修复 `kimi-for-coding` 模型的能力
+
+## 1.0 (2026-01-27)
+
+- Shell：添加 `/login` 和 `/logout` 斜杠命令，用于登录和登出
+- CLI：添加 `kimi login` 和 `kimi logout` 子命令
+- Core：修复子 Agent 审批请求处理问题
+
+## 0.88 (2026-01-26)
+
+- MCP：移除连接 MCP 服务器时的 `Mcp-Session-Id` header 以修复兼容性问题
+
+## 0.87 (2026-01-25)
+
+- Shell：修复 HTML 块出现在元素外时的 Markdown 渲染错误
+- Skills：添加更多用户级和项目级 Skills 目录候选
+- Core：改进系统提示词中的媒体文件生成和处理任务指引
+- Shell：修复 macOS 上从剪贴板粘贴图片的问题
+
+## 0.86 (2026-01-24)
+
+- Build：修复二进制构建问题
+
+## 0.85 (2026-01-24)
+
+- Shell：粘贴的图片缓存到磁盘，支持跨会话持久化
+- Shell：基于内容哈希去重缓存的附件
+- Shell：修复消息历史中图片/音频/视频附件的显示
+- Tool：使用文件路径作为 `ReadMediaFile` 中的媒体标识符，提高可追溯性
+- Tool：修复部分 MP4 文件无法识别为视频的问题
+- Shell：执行斜杠命令时支持 Ctrl-C 中断
+- Shell：修复 Shell 模式下输入不符合 Shell 语法的内容时的解析错误
+- Shell：修复 MCP 服务器和第三方库的 stderr 输出污染 Shell UI 的问题
+- Wire：优雅关闭，当连接关闭或收到 Ctrl-C 时正确清理待处理请求
+
+## 0.84 (2026-01-22)
+
+- Build：添加跨平台独立二进制构建，支持 Windows、macOS（含代码签名和公证）和 Linux（x86_64 和 ARM64）
+- Shell：修复斜杠命令自动补全在输入完整命令/别名时仍显示建议的问题
+- Tool：将 SVG 文件作为文本而非图片处理
+- Flow：支持 D2 markdown 块字符串（`|md` 语法），用于 Flow Skill 中的多行节点标签
+- Core：修复运行 `/reload`、`/setup` 或 `/clear` 后可能出现的 "event loop is closed" 错误
+- Core：修复在续接会话中使用 `/clear` 时的崩溃问题
+
+## 0.83 (2026-01-21)
+
+- Tool：添加 `ReadMediaFile` 工具用于读取图片/视频文件；`ReadFile` 现在仅用于读取文本文件
+- Skills：Flow Skills 现在也注册为 `/skill:<skill-name>` 命令（除了 `/flow:<skill-name>`）
+
+## 0.82 (2026-01-21)
+
+- Tool：`WriteFile` 和 `StrReplaceFile` 工具支持使用绝对路径编辑/写入工作目录外的文件
+- Tool：使用 Kimi 供应商时，视频文件上传到 Kimi Files API，使用 `ms://` 引用替代 inline data URL
+- Config：添加 `reserved_context_size` 配置项，自定义自动压缩触发阈值（默认 50000 tokens）
+
+## 0.81 (2026-01-21)
+
+- Skills：添加 Flow Skill 类型，在 SKILL.md 中内嵌 Agent Flow（Mermaid/D2），通过 `/flow:<skill-name>` 命令调用
+- CLI：移除 `--prompt-flow` 选项，改用 Flow Skills
+- Core：用 `/flow:<skill-name>` 命令替代原来的 `/begin` 命令
+
+## 0.80 (2026-01-20)
+
+- Wire：添加 `initialize` 方法，用于交换客户端/服务端信息、注册外部工具和公布斜杠命令
+- Wire：支持通过 Wire 协议调用外部工具
+- Wire：将 `ApprovalRequestResolved` 重命名为 `ApprovalResponse`（向后兼容）
 
 ## 0.79 (2026-01-19)
 
@@ -43,7 +234,7 @@
 ## 0.75 (2026-01-09)
 
 - Tool：改进 `ReadFile` 工具描述
-- Skills：添加内置 `kimi-cli-help` Skill，解答 Kimi CLI 使用和配置问题
+- Skills：添加内置 `kimi-cli-help` Skill，解答 Kimi Code CLI 使用和配置问题
 
 ## 0.74 (2026-01-09)
 
@@ -119,7 +310,7 @@
 - Lib：添加 `KimiToolset.load_mcp_tools` 方法，加载 MCP 工具
 - Lib：将 `MCPTool` 从 `kimi_cli.tools.mcp` 移至 `kimi_cli.soul.toolset`
 - Lib：添加 `InvalidToolError`、`MCPConfigError` 和 `MCPRuntimeError` 异常类
-- Lib：使 Kimi CLI 详细异常类扩展 `ValueError` 或 `RuntimeError`
+- Lib：使 Kimi Code CLI 详细异常类扩展 `ValueError` 或 `RuntimeError`
 - Lib：`KimiCLI.create` 和 `load_agent` 的 `mcp_configs` 参数支持传入验证后的 `list[fastmcp.mcp_config.MCPConfig]`
 - Lib：修复 `KimiCLI.create`、`load_agent`、`KimiToolset.load_tools` 和 `KimiToolset.load_mcp_tools` 的异常抛出
 - LLM：添加 `vertexai` 供应商类型，支持 Vertex AI

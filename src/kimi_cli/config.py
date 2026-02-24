@@ -2,16 +2,33 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Self
+from typing import Literal, Self
 
 import tomlkit
-from pydantic import BaseModel, Field, SecretStr, ValidationError, field_serializer, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    Field,
+    SecretStr,
+    ValidationError,
+    field_serializer,
+    model_validator,
+)
 from tomlkit.exceptions import TOMLKitError
 
 from kimi_cli.exception import ConfigError
 from kimi_cli.llm import ModelCapability, ProviderType
 from kimi_cli.share import get_share_dir
 from kimi_cli.utils.logging import logger
+
+
+class OAuthRef(BaseModel):
+    """Reference to OAuth credentials stored outside the config file."""
+
+    storage: Literal["keyring", "file"] = "file"
+    """Credential storage backend."""
+    key: str
+    """Storage key to locate OAuth credentials."""
 
 
 class LLMProvider(BaseModel):
@@ -27,6 +44,8 @@ class LLMProvider(BaseModel):
     """Environment variables to set before creating the provider instance"""
     custom_headers: dict[str, str] | None = None
     """Custom headers to include in API requests"""
+    oauth: OAuthRef | None = None
+    """OAuth credential reference (do not store tokens here)."""
 
     @field_serializer("api_key", when_used="json")
     def dump_secret(self, v: SecretStr):
@@ -49,12 +68,19 @@ class LLMModel(BaseModel):
 class LoopControl(BaseModel):
     """Agent loop control configuration."""
 
-    max_steps_per_turn: int = Field(default=100, ge=1, validation_alias="max_steps_per_run")
+    max_steps_per_turn: int = Field(
+        default=100,
+        ge=1,
+        validation_alias=AliasChoices("max_steps_per_turn", "max_steps_per_run"),
+    )
     """Maximum number of steps in one turn"""
     max_retries_per_step: int = Field(default=3, ge=1)
     """Maximum number of retries in one step"""
     max_ralph_iterations: int = Field(default=0, ge=-1)
     """Extra iterations after the first turn in Ralph mode. Use -1 for unlimited."""
+    reserved_context_size: int = Field(default=50_000, ge=1000)
+    """Reserved token count for LLM response generation. Auto-compaction triggers when
+    context_tokens + reserved_context_size >= max_context_size. Default is 50000."""
 
 
 class MoonshotSearchConfig(BaseModel):
@@ -66,6 +92,8 @@ class MoonshotSearchConfig(BaseModel):
     """API key for Moonshot Search service."""
     custom_headers: dict[str, str] | None = None
     """Custom headers to include in API requests."""
+    oauth: OAuthRef | None = None
+    """OAuth credential reference (do not store tokens here)."""
 
     @field_serializer("api_key", when_used="json")
     def dump_secret(self, v: SecretStr):
@@ -81,6 +109,8 @@ class MoonshotFetchConfig(BaseModel):
     """API key for Moonshot Fetch service."""
     custom_headers: dict[str, str] | None = None
     """Custom headers to include in API requests."""
+    oauth: OAuthRef | None = None
+    """OAuth credential reference (do not store tokens here)."""
 
     @field_serializer("api_key", when_used="json")
     def dump_secret(self, v: SecretStr):
@@ -121,6 +151,7 @@ class Config(BaseModel):
     )
     default_model: str = Field(default="", description="Default model to use")
     default_thinking: bool = Field(default=False, description="Default thinking mode")
+    default_yolo: bool = Field(default=False, description="Default yolo (auto-approve) mode")
     models: dict[str, LLMModel] = Field(default_factory=dict, description="List of LLM models")
     providers: dict[str, LLMProvider] = Field(
         default_factory=dict, description="List of LLM providers"
@@ -195,11 +226,11 @@ def load_config(config_file: Path | None = None) -> Config:
             data = tomlkit.loads(config_text)
         config = Config.model_validate(data)
     except json.JSONDecodeError as e:
-        raise ConfigError(f"Invalid JSON in configuration file: {e}") from e
+        raise ConfigError(f"Invalid JSON in configuration file {config_file}: {e}") from e
     except TOMLKitError as e:
-        raise ConfigError(f"Invalid TOML in configuration file: {e}") from e
+        raise ConfigError(f"Invalid TOML in configuration file {config_file}: {e}") from e
     except ValidationError as e:
-        raise ConfigError(f"Invalid configuration file: {e}") from e
+        raise ConfigError(f"Invalid configuration file {config_file}: {e}") from e
     config.is_from_default_location = is_default_config_file
     return config
 

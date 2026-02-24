@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import string
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -9,12 +8,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pydantic
+from jinja2 import Environment as JinjaEnvironment
+from jinja2 import StrictUndefined, TemplateError, UndefinedError
 from kaos.path import KaosPath
 from kosong.tooling import Toolset
 
 from kimi_cli.agentspec import load_agent_spec
+from kimi_cli.auth.oauth import OAuthManager
 from kimi_cli.config import Config
-from kimi_cli.exception import MCPConfigError
+from kimi_cli.exception import MCPConfigError, SystemPromptTemplateError
 from kimi_cli.llm import LLM
 from kimi_cli.session import Session
 from kimi_cli.skill import Skill, discover_skills_from_roots, index_skills, resolve_skills_roots
@@ -63,6 +65,7 @@ class Runtime:
     """Agent runtime."""
 
     config: Config
+    oauth: OAuthManager
     llm: LLM | None  # we do not freeze the `Runtime` dataclass because LLM can be changed
     session: Session
     builtin_args: BuiltinSystemPromptArgs
@@ -75,6 +78,7 @@ class Runtime:
     @staticmethod
     async def create(
         config: Config,
+        oauth: OAuthManager,
         llm: LLM | None,
         session: Session,
         yolo: bool,
@@ -102,6 +106,7 @@ class Runtime:
 
         return Runtime(
             config=config,
+            oauth=oauth,
             llm=llm,
             session=session,
             builtin_args=BuiltinSystemPromptArgs(
@@ -122,11 +127,12 @@ class Runtime:
         """Clone runtime for fixed subagent."""
         return Runtime(
             config=self.config,
+            oauth=self.oauth,
             llm=self.llm,
             session=self.session,
             builtin_args=self.builtin_args,
             denwa_renji=DenwaRenji(),  # subagent must have its own DenwaRenji
-            approval=self.approval,
+            approval=self.approval.share(),
             labor_market=LaborMarket(),  # fixed subagent has its own LaborMarket
             environment=self.environment,
             skills=self.skills,
@@ -136,11 +142,12 @@ class Runtime:
         """Clone runtime for dynamic subagent."""
         return Runtime(
             config=self.config,
+            oauth=self.oauth,
             llm=self.llm,
             session=self.session,
             builtin_args=self.builtin_args,
             denwa_renji=DenwaRenji(),  # subagent must have its own DenwaRenji
-            approval=self.approval,
+            approval=self.approval.share(),
             labor_market=self.labor_market,  # dynamic subagent shares LaborMarket with main agent
             environment=self.environment,
             skills=self.skills,
@@ -191,6 +198,8 @@ async def load_agent(
     Raises:
         FileNotFoundError: When the agent file is not found.
         AgentSpecError(KimiCLIException, ValueError): When the agent specification is invalid.
+        SystemPromptTemplateError(KimiCLIException, ValueError): When the system prompt template
+            is invalid.
         InvalidToolError(KimiCLIException, ValueError): When any tool cannot be loaded.
         MCPConfigError(KimiCLIException, ValueError): When any MCP configuration is invalid.
         MCPRuntimeError(KimiCLIException, RuntimeError): When any MCP server cannot be connected.
@@ -267,4 +276,18 @@ def _load_system_prompt(
         builtin_args=builtin_args,
         spec_args=args,
     )
-    return string.Template(system_prompt).substitute(asdict(builtin_args), **args)
+    env = JinjaEnvironment(
+        keep_trailing_newline=True,
+        lstrip_blocks=True,
+        trim_blocks=True,
+        variable_start_string="${",
+        variable_end_string="}",
+        undefined=StrictUndefined,
+    )
+    try:
+        template = env.from_string(system_prompt)
+        return template.render(asdict(builtin_args), **args)
+    except UndefinedError as exc:
+        raise SystemPromptTemplateError(f"Missing system prompt arg in {path}: {exc}") from exc
+    except TemplateError as exc:
+        raise SystemPromptTemplateError(f"Invalid system prompt template: {path}: {exc}") from exc

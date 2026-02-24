@@ -1,11 +1,13 @@
 import copy
+import mimetypes
 import os
 import uuid
 from collections.abc import AsyncIterator, Sequence
-from typing import TYPE_CHECKING, Any, Self, TypedDict, Unpack, cast
+from typing import TYPE_CHECKING, Any, Literal, Self, Unpack, cast
 
 import httpx
-from openai import AsyncOpenAI, AsyncStream, OpenAIError, omit
+from openai import AsyncOpenAI, AsyncStream, BaseModel, OpenAIError, omit
+from openai._types import RequestFiles, RequestOptions
 from openai.types.chat import (
     ChatCompletion,
     ChatCompletionChunk,
@@ -14,22 +16,46 @@ from openai.types.chat import (
     ChatCompletionToolParam,
 )
 from openai.types.completion_usage import CompletionUsage
+from typing_extensions import TypedDict
 
 from kosong.chat_provider import (
     ChatProvider,
     ChatProviderError,
+    RetryableChatProvider,
     StreamedMessagePart,
     ThinkingEffort,
     TokenUsage,
 )
-from kosong.chat_provider.openai_common import convert_error, tool_to_openai
-from kosong.message import ContentPart, Message, TextPart, ThinkPart, ToolCall, ToolCallPart
+from kosong.chat_provider.openai_common import (
+    close_replaced_openai_client,
+    convert_error,
+    create_openai_client,
+    tool_to_openai,
+)
+from kosong.message import (
+    ContentPart,
+    Message,
+    TextPart,
+    ThinkPart,
+    ToolCall,
+    ToolCallPart,
+    VideoURLPart,
+)
 from kosong.tooling import Tool
 
 if TYPE_CHECKING:
 
     def type_check(kimi: "Kimi"):
         _: ChatProvider = kimi
+        _: RetryableChatProvider = kimi
+
+
+class ThinkingConfig(TypedDict, total=True):
+    type: Literal["enabled", "disabled"]
+
+
+class ExtraBody(TypedDict, total=False, extra_items=Any):
+    thinking: ThinkingConfig
 
 
 class Kimi:
@@ -63,6 +89,8 @@ class Kimi:
         stop: str | list[str] | None
         prompt_cache_key: str | None
         reasoning_effort: str | None
+        """Legacy thinking parameter. Use `extra_body.thinking` instead."""
+        extra_body: ExtraBody | None
 
     def __init__(
         self,
@@ -86,10 +114,13 @@ class Kimi:
         """The name of the model to use."""
         self.stream: bool = stream
         """Whether to generate responses as a stream."""
-        self.client: AsyncOpenAI = AsyncOpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            **client_kwargs,
+        self._api_key: str | None = api_key
+        self._base_url: str | None = base_url
+        self._client_kwargs: dict[str, Any] = dict(client_kwargs)
+        self.client: AsyncOpenAI = create_openai_client(
+            api_key=self._api_key,
+            base_url=self._base_url,
+            client_kwargs=self._client_kwargs,
         )
         """The underlying `AsyncOpenAI` client."""
         self._generation_kwargs: Kimi.GenerationKwargs = {}
@@ -129,12 +160,6 @@ class Kimi:
             "max_tokens": 32000,
         }
         generation_kwargs.update(self._generation_kwargs)
-        if "temperature" not in generation_kwargs:
-            # set default temperature based on model name
-            if "kimi-k2-thinking" in self.model or self._generation_kwargs.get("reasoning_effort"):
-                generation_kwargs["temperature"] = 1.0
-            elif "kimi-k2-" in self.model:
-                generation_kwargs["temperature"] = 0.6
 
         try:
             response = await self.client.chat.completions.create(
@@ -149,6 +174,16 @@ class Kimi:
         except (OpenAIError, httpx.HTTPError) as e:
             raise convert_error(e) from e
 
+    def on_retryable_error(self, error: BaseException) -> bool:
+        old_client = self.client
+        self.client = create_openai_client(
+            api_key=self._api_key,
+            base_url=self._base_url,
+            client_kwargs=self._client_kwargs,
+        )
+        close_replaced_openai_client(old_client, client_kwargs=self._client_kwargs)
+        return True
+
     def with_thinking(self, effort: ThinkingEffort) -> Self:
         match effort:
             case "off":
@@ -159,7 +194,13 @@ class Kimi:
                 reasoning_effort = "medium"
             case "high":
                 reasoning_effort = "high"
-        return self.with_generation_kwargs(reasoning_effort=reasoning_effort)
+        return self.with_generation_kwargs(reasoning_effort=reasoning_effort).with_extra_body(
+            {
+                "thinking": {
+                    "type": "enabled" if effort != "off" else "disabled",
+                }
+            }
+        )
 
     def with_generation_kwargs(self, **kwargs: Unpack[GenerationKwargs]) -> Self:
         """
@@ -173,6 +214,20 @@ class Kimi:
         new_self._generation_kwargs.update(kwargs)
         return new_self
 
+    def with_extra_body(self, extra_body: ExtraBody) -> Self:
+        """
+        Copy the chat provider, updating the extra_body in generation kwargs.
+
+        Returns:
+            Self: A new instance of the chat provider with updated extra_body.
+        """
+        new_self = copy.copy(self)
+        new_self._generation_kwargs = copy.deepcopy(self._generation_kwargs)
+        old_extra_body = new_self._generation_kwargs.get("extra_body") or {}
+        new_extra_body: ExtraBody = {**old_extra_body, **extra_body}
+        new_self._generation_kwargs["extra_body"] = new_extra_body
+        return new_self
+
     @property
     def model_parameters(self) -> dict[str, Any]:
         """
@@ -184,6 +239,50 @@ class Kimi:
         model_parameters: dict[str, Any] = {"base_url": str(self.client.base_url)}
         model_parameters.update(self._generation_kwargs)
         return model_parameters
+
+    @property
+    def files(self) -> "KimiFiles":
+        return KimiFiles(self.client)
+
+
+class KimiFiles:
+    def __init__(self, client: AsyncOpenAI) -> None:
+        self._client = client
+
+    async def upload_video(self, *, data: bytes, mime_type: str) -> VideoURLPart:
+        """Upload a video to Kimi files API and return a video URL content part."""
+        if not mime_type.startswith("video/"):
+            raise ChatProviderError(f"Expected a video mime type, got {mime_type}")
+        url = await self._upload_file(data=data, mime_type=mime_type, purpose="video")
+        return VideoURLPart(video_url=VideoURLPart.VideoURL(url=url))
+
+    async def _upload_file(self, *, data: bytes, mime_type: str, purpose: "KimiFilePurpose") -> str:
+        filename = _guess_filename(mime_type)
+        files: RequestFiles = {"file": (filename, data, mime_type)}
+        options: RequestOptions = {"headers": {"Content-Type": "multipart/form-data"}}
+        try:
+            response: KimiFileObject = await self._client.post(
+                "/files",
+                cast_to=KimiFileObject,
+                body={"purpose": purpose},
+                files=files,
+                options=options,
+            )
+        except (OpenAIError, httpx.HTTPError) as e:
+            raise convert_error(e) from e
+        return f"ms://{response.id}"
+
+
+class KimiFileObject(BaseModel):
+    id: str
+
+
+type KimiFilePurpose = Literal["video", "image"]
+
+
+def _guess_filename(mime_type: str) -> str:
+    extension = mimetypes.guess_extension(mime_type) or ".bin"
+    return f"upload{extension}"
 
 
 def _convert_message(message: Message) -> ChatCompletionMessageParam:
@@ -294,8 +393,8 @@ class KimiStreamedMessage:
             async for chunk in response:
                 if chunk.id:
                     self._id = chunk.id
-                if chunk.usage:
-                    self._usage = chunk.usage
+                if usage := extract_usage_from_chunk(chunk):
+                    self._usage = usage
 
                 if not chunk.choices:
                     continue
@@ -333,6 +432,20 @@ class KimiStreamedMessage:
                         pass
         except (OpenAIError, httpx.HTTPError) as e:
             raise convert_error(e) from e
+
+
+def extract_usage_from_chunk(chunk: ChatCompletionChunk) -> CompletionUsage | None:
+    if chunk.usage:
+        return chunk.usage
+    if not chunk.choices:
+        return None
+    choice_dump: dict[str, object] = chunk.choices[0].model_dump()
+    raw_usage = choice_dump.get("usage")
+    if isinstance(raw_usage, CompletionUsage):
+        return raw_usage
+    if isinstance(raw_usage, dict):
+        return CompletionUsage.model_validate(raw_usage)
+    return None
 
 
 if __name__ == "__main__":

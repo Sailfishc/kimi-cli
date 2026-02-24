@@ -11,6 +11,197 @@ Only write entries that are worth mentioning to users.
 
 ## Unreleased
 
+## 1.13.0 (2026-02-24)
+
+- Core: Add automatic connection recovery that recreates the HTTP client on connection and timeout errors before retrying, improving resilience against transient network failures
+
+## 1.12.0 (2026-02-11)
+
+- Web: Add subagent activity rendering to display subagent steps (thinking, tool calls, text) inside Task tool messages
+- Web: Add Think tool rendering as a lightweight reasoning-style block
+- Web: Replace emoji status indicators with Lucide icons for tool states and add category-specific icons for tool names
+- Web: Enhance Reasoning component with improved thinking labels and status icons
+- Web: Enhance Todo component with status icons and improved styling
+- Web: Implement WebSocket reconnection with automatic request resending and stale connection watchdog
+- Web: Enhance session creation dialog with command value handling
+- Web: Support tilde (`~`) expansion in session work directory paths
+- Web: Fix assistant message content overflow clipping
+- Wire: Fix deadlock when multiple subagents run concurrently by not blocking the UI loop on approval and tool-call requests
+- Wire: Clean up stale pending requests after agent turn ends
+- Web: Show placeholder text in prompt input with hints for slash commands and file mentions
+- Web: Fix Ctrl+C not working in uvicorn web server by restoring default SIGINT handler and terminal state after shell mode exits
+- Web: Improve session stop handling with proper async cleanup and timeout
+
+## 1.11.0 (2026-02-10)
+
+- Web: Move context usage indicator from workspace header to prompt toolbar with a hover card showing detailed token usage breakdown
+- Web: Add folder indicator with work directory path to the bottom of the file changes panel
+- Web: Fix stderr not being restored when switching to web mode, which could suppress web server error output
+- Web: Fix port availability check by setting SO_REUSEADDR on the test socket
+
+## 1.10.0 (2026-02-09)
+
+- Web: Add copy and fork action buttons to assistant messages for quick content copying and session forking
+- Web: Add keyboard shortcuts for approval actions — press `1` to approve, `2` to approve for session, `3` to decline
+- Web: Add message queueing — queue follow-up messages while the AI is processing; queued messages are sent automatically when the response completes
+- Web: Replace Git diff status bar with unified prompt toolbar showing activity status, message queue, and file changes in collapsible tabs
+- Web: Load global MCP configuration in web worker so web sessions can use MCP tools
+- Web: Improve mobile prompt input UX — reduce textarea min-height, add `autoComplete="off"`, and disable focus ring on small screens
+- Web: Handle models that stream text before thinking by ensuring thinking messages always appear before text in the message list
+- Web: Show more specific status messages during session connection ("Loading history...", "Starting environment..." instead of generic "Connecting...")
+- Web: Send error status when session environment initialization fails instead of leaving UI in a waiting state
+- Web: Auto-reconnect when no session status received within 15 seconds after history replay completes
+- Web: Use non-blocking file I/O in session streaming to avoid blocking the event loop during history replay
+
+## 1.9.0 (2026-02-06)
+
+- Config: Add `default_yolo` config option to enable YOLO (auto-approve) mode by default
+- Config: Accept both `max_steps_per_turn` and `max_steps_per_run` as aliases for the loop control setting
+- Wire: Add `replay` request to stream recorded Wire events (protocol version 1.3)
+- Web: Add session fork feature to branch off a new session from any assistant response
+- Web: Add session archive feature with auto-archive for sessions older than 15 days
+- Web: Add multi-select mode for bulk archive, unarchive, and delete operations
+- Web: Add media preview for tool results (images/videos from ReadMediaFile) with clickable thumbnails
+- Web: Add shell command and todo list display components for tool outputs
+- Web: Add activity status indicator showing agent state (processing, waiting for approval, etc.)
+- Web: Add error fallback UI when images fail to load
+- Web: Redesign tool input UI with expandable parameters and syntax highlighting for long values
+- Web: Show compaction indicator when context is being compacted
+- Web: Improve auto-scroll behavior in chat for smoother following of new content
+- Web: Update `last_session_id` for work directory when session stream starts
+- Shell: Remove `Ctrl-/` keyboard shortcut that triggered `/help` command
+- Rust: Move the Rust implementation to `MoonshotAI/kimi-agent-rs` with independent releases; binary renamed to `kimi-agent`
+- Core: Preserve session id when reloading configuration so the session resumes correctly
+- Shell: Fix session replay showing messages that were cleared by `/clear` or `/reset`
+- Web: Fix approval request states not updating when session is interrupted or cancelled
+- Web: Fix IME composition issue when selecting slash commands
+- Web: Fix UI not clearing messages after `/clear`, `/reset`, or `/compact` commands
+
+## 1.8.0 (2026-02-05)
+
+- CLI: Fix startup errors (e.g. invalid config files) being silently swallowed instead of displayed
+
+## 1.7.0 (2026-02-05)
+
+- Rust: Add `kagent`, the Rust implementation of Kimi agent kernel with wire-mode support (experimental)
+- Auth: Fix OAuth token refresh conflicts when running multiple sessions simultaneously
+- Web: Add file mention menu (`@`) to reference uploaded attachments and workspace files with autocomplete
+- Web: Add slash command menu in chat input with autocomplete, keyboard navigation, and alias support
+- Web: Prompt to create directory when specified path doesn't exist during session creation
+- Web: Fix authentication token persistence by switching from sessionStorage to localStorage with 24-hour expiry
+- Web: Add server-side pagination for session list with virtualized scrolling for better performance
+- Web: Improve session and work directories loading with smarter caching and invalidation
+- Web: Fix WebSocket errors during history replay by checking connection state before sending
+- Web: Git diff status bar now shows untracked files (new files not yet added to git)
+- Web: Restrict sensitive APIs only in public mode; update origin enforcement logic
+
+## 1.6 (2026-02-03)
+
+- Web: Add token-based authentication and access control for network mode (`--network`, `--lan-only`, `--public`)
+- Web: Add security options: `--auth-token`, `--allowed-origins`, `--restrict-sensitive-apis`, `--dangerously-omit-auth`
+- Web: Change `--host` option to bind to specific IP address; add automatic network address detection
+- Web: Fix WebSocket disconnect when creating new sessions
+- Web: Increase maximum image dimension from 1024 to 4096 pixels
+- Web: Improve UI responsiveness with enhanced hover effects and better layout handling
+- Wire: Add `TurnEnd` event to signal the completion of an agent turn (protocol version 1.2)
+- Core: Fix custom agent prompt files containing `$` causing silent startup failure
+
+## 1.5 (2026-01-30)
+
+- Web: Add Git diff status bar showing uncommitted changes in session working directory
+- Web: Add "Open in" menu for opening files/directories in Terminal, VS Code, Cursor, or other local applications
+- Web: Add search functionality to filter sessions by title or working directory
+- Web: Improve session title display with proper overflow handling
+
+## 1.4 (2026-01-30)
+
+- Shell: Merge `/login` and `/setup` commands; `/setup` is now an alias for `/login`
+- Shell: `/usage` now shows remaining quota percentage; add `/status` alias
+- Config: Add `KIMI_SHARE_DIR` environment variable to customize the share directory path (default: `~/.kimi`)
+- Web: Add new Web UI for browser-based interaction
+- CLI: Add `kimi web` subcommand to launch the Web UI server
+- Auth: Fix encoding error when device name or OS version contains non-ASCII characters
+- Auth: OAuth credentials are now stored in files instead of keyring; existing tokens are automatically migrated on startup
+- Auth: Fix authorization failure after the system sleeps or hibernates
+
+## 1.3 (2026-01-28)
+
+- Auth: Fix authentication issue during agent turns
+- Tool: Wrap media content with descriptive tags in `ReadMediaFile` for better path traceability
+
+## 1.2 (2026-01-27)
+
+- UI: Show description for `kimi-for-coding` model
+
+## 1.1 (2026-01-27)
+
+- LLM: Fix `kimi-for-coding` model's capabilities
+
+## 1.0 (2026-01-27)
+
+- Shell: Add `/login` and `/logout` slash commands for login and logout
+- CLI: Add `kimi login` and `kimi logout` subcommands
+- Core: Fix subagent approval request handling
+
+## 0.88 (2026-01-26)
+
+- MCP: Remove `Mcp-Session-Id` header when connecting to MCP servers to fix compatibility
+
+## 0.87 (2026-01-25)
+
+- Shell: Fix Markdown rendering error when HTML blocks appear outside any element
+- Skills: Add more user-level and project-level skills directory candidates
+- Core: Improve system prompt guidance for media file generation and processing tasks
+- Shell: Fix image pasting from clipboard on macOS
+
+## 0.86 (2026-01-24)
+
+- Build: Fix binary builds
+
+## 0.85 (2026-01-24)
+
+- Shell: Cache pasted images to disk for persistence across sessions
+- Shell: Deduplicate cached attachments based on content hash
+- Shell: Fix display of image/audio/video attachments in message history
+- Tool: Use file path as media identifier in `ReadMediaFile` for better traceability
+- Tool: Fix some MP4 files not being recognized as videos
+- Shell: Handle Ctrl-C during slash command execution
+- Shell: Fix shlex parsing error in shell mode when input contains invalid shell syntax
+- Shell: Fix stderr output from MCP servers and third-party libraries polluting shell UI
+- Wire: Graceful shutdown with proper cleanup of pending requests when connection closes or Ctrl-C is received
+
+## 0.84 (2026-01-22)
+
+- Build: Add cross-platform standalone binary builds for Windows, macOS (with code signing and notarization), and Linux (x86_64 and ARM64)
+- Shell: Fix slash command autocomplete showing suggestions for exact command/alias matches
+- Tool: Treat SVG files as text instead of images
+- Flow: Support D2 markdown block strings (`|md` syntax) for multiline node labels in flow skills
+- Core: Fix possible "event loop is closed" error after running `/reload`, `/setup`, or `/clear`
+- Core: Fix panic when `/clear` is used in a continued session
+
+## 0.83 (2026-01-21)
+
+- Tool: Add `ReadMediaFile` tool for reading image/video files; `ReadFile` now focuses on text files only
+- Skills: Flow skills now also register as `/skill:<skill-name>` commands (in addition to `/flow:<skill-name>`)
+
+## 0.82 (2026-01-21)
+
+- Tool: Allow `WriteFile` and `StrReplaceFile` tools to edit/write files outside the working directory when using absolute paths
+- Tool: Upload videos to Kimi files API when using Kimi provider, replacing inline data URLs with `ms://` references
+- Config: Add `reserved_context_size` setting to customize auto-compaction trigger threshold (default: 50000 tokens)
+
+## 0.81 (2026-01-21)
+
+- Skills: Add flow skill type with embedded Agent Flow (Mermaid/D2) in SKILL.md, invoked via `/flow:<skill-name>` commands
+- CLI: Remove `--prompt-flow` option; use flow skills instead
+- Core: Replace `/begin` command with `/flow:<skill-name>` commands for flow skills
+
+## 0.80 (2026-01-20)
+
+- Wire: Add `initialize` method for exchanging client/server info, external tools registration and slash commands advertisement
+- Wire: Support external tool calls via Wire protocol
+- Wire: Rename `ApprovalRequestResolved` to `ApprovalResponse` (backwards-compatible)
+
 ## 0.79 (2026-01-19)
 
 - Skills: Add project-level skills support, discovered from `.agents/skills/` (or `.kimi/skills/`, `.claude/skills/`)
@@ -50,7 +241,7 @@ Only write entries that are worth mentioning to users.
 ## 0.75 (2026-01-09)
 
 - Tool: Improve `ReadFile` tool description
-- Skills: Add built-in `kimi-cli-help` skill to answer Kimi CLI usage and configuration questions
+- Skills: Add built-in `kimi-cli-help` skill to answer Kimi Code CLI usage and configuration questions
 
 ## 0.74 (2026-01-09)
 
@@ -126,7 +317,7 @@ Only write entries that are worth mentioning to users.
 - Lib: Add `KimiToolset.load_mcp_tools` method to load MCP tools
 - Lib: Move `MCPTool` from `kimi_cli.tools.mcp` to `kimi_cli.soul.toolset`
 - Lib: Add `InvalidToolError`, `MCPConfigError` and `MCPRuntimeError`
-- Lib: Make the detailed Kimi CLI exception classes extend `ValueError` or `RuntimeError`
+- Lib: Make the detailed Kimi Code CLI exception classes extend `ValueError` or `RuntimeError`
 - Lib: Allow passing validated `list[fastmcp.mcp_config.MCPConfig]` as `mcp_configs` for `KimiCLI.create` and `load_agent`
 - Lib: Fix exception raising for `KimiCLI.create`, `load_agent`, `KimiToolset.load_tools` and `KimiToolset.load_mcp_tools`
 - LLM: Add provider type `vertexai` to support Vertex AI

@@ -1,10 +1,10 @@
 # Config Files
 
-Kimi CLI uses configuration files to manage API providers, models, services, and runtime parameters, supporting both TOML and JSON formats.
+Kimi Code CLI uses configuration files to manage API providers, models, services, and runtime parameters, supporting both TOML and JSON formats.
 
 ## Config file location
 
-The default configuration file is located at `~/.kimi/config.toml`. On first run, if the configuration file doesn't exist, Kimi CLI will automatically create a default configuration file.
+The default configuration file is located at `~/.kimi/config.toml`. On first run, if the configuration file doesn't exist, Kimi Code CLI will automatically create a default configuration file.
 
 You can specify a different configuration file (TOML or JSON format) with the `--config-file` flag:
 
@@ -12,7 +12,7 @@ You can specify a different configuration file (TOML or JSON format) with the `-
 kimi --config-file /path/to/config.toml
 ```
 
-When calling Kimi CLI programmatically, you can also pass the complete configuration content directly via the `--config` flag:
+When calling Kimi Code CLI programmatically, you can also pass the complete configuration content directly via the `--config` flag:
 
 ```sh
 kimi --config '{"default_model": "kimi-for-coding", "providers": {...}, "models": {...}}'
@@ -26,6 +26,7 @@ The configuration file contains the following top-level configuration items:
 | --- | --- | --- |
 | `default_model` | `string` | Default model name, must be a model defined in `models` |
 | `default_thinking` | `boolean` | Whether to enable thinking mode by default (defaults to `false`) |
+| `default_yolo` | `boolean` | Whether to enable YOLO (auto-approve) mode by default (defaults to `false`) |
 | `providers` | `table` | API provider configuration |
 | `models` | `table` | Model configuration |
 | `loop_control` | `table` | Agent loop control parameters |
@@ -37,6 +38,7 @@ The configuration file contains the following top-level configuration items:
 ```toml
 default_model = "kimi-for-coding"
 default_thinking = false
+default_yolo = false
 
 [providers.kimi-for-coding]
 type = "kimi"
@@ -52,6 +54,7 @@ max_context_size = 262144
 max_steps_per_turn = 100
 max_retries_per_step = 3
 max_ralph_iterations = 0
+reserved_context_size = 50000
 
 [services.moonshot_search]
 base_url = "https://api.kimi.com/coding/v1/search"
@@ -117,10 +120,11 @@ capabilities = ["thinking", "image_in"]
 | `max_steps_per_turn` | `integer` | `100` | Maximum steps per turn (alias: `max_steps_per_run`) |
 | `max_retries_per_step` | `integer` | `3` | Maximum retries per step |
 | `max_ralph_iterations` | `integer` | `0` | Extra iterations after each user message; `0` disables; `-1` is unlimited |
+| `reserved_context_size` | `integer` | `50000` | Reserved token count for LLM response generation; auto-compaction triggers when `context_tokens + reserved_context_size >= max_context_size` |
 
 ### `services`
 
-`services` configures external services used by Kimi CLI.
+`services` configures external services used by Kimi Code CLI.
 
 #### `moonshot_search`
 
@@ -143,7 +147,7 @@ Configures web fetch service. When enabled, the `FetchURL` tool prioritizes usin
 | `custom_headers` | `table` | No | Custom HTTP headers to attach to requests |
 
 ::: tip
-When configuring the Kimi Code platform using the `/setup` command, search and fetch services are automatically configured.
+When configuring the Kimi Code platform using the `/login` command, search and fetch services are automatically configured.
 :::
 
 ### `mcp`
@@ -156,6 +160,6 @@ When configuring the Kimi Code platform using the `/setup` command, search and f
 
 ## JSON configuration migration
 
-If `~/.kimi/config.toml` doesn't exist but `~/.kimi/config.json` exists, Kimi CLI will automatically migrate the JSON configuration to TOML format and backup the original file as `config.json.bak`.
+If `~/.kimi/config.toml` doesn't exist but `~/.kimi/config.json` exists, Kimi Code CLI will automatically migrate the JSON configuration to TOML format and backup the original file as `config.json.bak`.
 
-Configuration files specified via `--config-file` are parsed based on file extension. Configuration content passed via `--config` is first attempted as JSON, then falls back to TOML if that fails.
+`--config-file` specified configuration files are parsed based on file extension. `--config` passed configuration content is first attempted as JSON, then falls back to TOML if that fails.

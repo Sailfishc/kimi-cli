@@ -12,6 +12,7 @@ from kimi_cli.constant import VERSION
 
 from .info import cli as info_cli
 from .mcp import cli as mcp_cli
+from .web import cli as web_cli
 
 
 class Reload(Exception):
@@ -19,6 +20,14 @@ class Reload(Exception):
 
     def __init__(self, session_id: str | None = None):
         super().__init__("reload")
+        self.session_id = session_id
+
+
+class SwitchToWeb(Exception):
+    """Switch to web interface."""
+
+    def __init__(self, session_id: str | None = None):
+        super().__init__("switch_to_web")
         self.session_id = session_id
 
 
@@ -152,17 +161,6 @@ def kimi(
             "--command",
             "-c",
             help="User prompt to the agent. Default: prompt interactively.",
-        ),
-    ] = None,
-    prompt_flow: Annotated[
-        Path | None,
-        typer.Option(
-            "--prompt-flow",
-            exists=True,
-            file_okay=True,
-            dir_okay=False,
-            readable=True,
-            help="D2 (.d2) or Mermaid (.mmd) flowchart file to run as a prompt flow.",
         ),
     ] = None,
     print_mode: Annotated[
@@ -317,11 +315,24 @@ def kimi(
     from kimi_cli.exception import ConfigError
     from kimi_cli.metadata import load_metadata, save_metadata
     from kimi_cli.session import Session
-    from kimi_cli.utils.logging import logger
+    from kimi_cli.utils.logging import logger, open_original_stderr, redirect_stderr_to_logger
 
     from .mcp import get_global_mcp_config_file
 
-    enable_logging(debug)
+    # Don't redirect stderr yet. Our stderr redirector replaces fd=2 with a pipe, which
+    # would swallow Click/Typer startup errors (e.g. config parsing / BadParameter).
+    # We re-enable stderr redirection after KimiCLI.create() succeeds.
+    enable_logging(debug, redirect_stderr=False)
+
+    def _emit_fatal_error(message: str) -> None:
+        # Prefer writing to the original stderr fd even if we later redirect fd=2.
+        # This ensures fatal errors are visible to the user.
+        with open_original_stderr() as stream:
+            if stream is not None:
+                stream.write((message.rstrip() + "\n").encode("utf-8", errors="replace"))
+                stream.flush()
+                return
+        typer.echo(message, err=True)
 
     if session_id is not None:
         session_id = session_id.strip()
@@ -390,38 +401,6 @@ def kimi(
         if not prompt:
             raise typer.BadParameter("Prompt cannot be empty", param_hint="--prompt")
 
-    flow = None
-    if prompt_flow is not None:
-        from kimi_cli.flow import PromptFlowError
-        from kimi_cli.flow.d2 import parse_d2_flowchart
-        from kimi_cli.flow.mermaid import parse_mermaid_flowchart
-
-        if max_ralph_iterations is not None and max_ralph_iterations != 0:
-            raise typer.BadParameter(
-                "Prompt flow cannot be used with Ralph mode",
-                param_hint="--prompt-flow",
-            )
-        try:
-            flow_text = prompt_flow.read_text(encoding="utf-8")
-        except OSError as e:
-            raise typer.BadParameter(
-                f"Failed to read prompt flow file: {e}", param_hint="--prompt-flow"
-            ) from e
-        suffix = prompt_flow.suffix.lower()
-        if suffix in {".mmd", ".mermaid"}:
-            parser = parse_mermaid_flowchart
-        elif suffix == ".d2":
-            parser = parse_d2_flowchart
-        else:
-            raise typer.BadParameter(
-                "Unsupported prompt flow extension; use .mmd or .d2",
-                param_hint="--prompt-flow",
-            )
-        try:
-            flow = parser(flow_text)
-        except PromptFlowError as e:
-            raise typer.BadParameter(str(e), param_hint="--prompt-flow") from e
-
     if input_format is not None and ui != "print":
         raise typer.BadParameter(
             "Input format is only supported for print UI",
@@ -475,7 +454,13 @@ def kimi(
 
     work_dir = KaosPath.unsafe_from_local_path(local_work_dir) if local_work_dir else KaosPath.cwd()
 
-    async def _run(session_id: str | None) -> bool:
+    async def _run(session_id: str | None) -> tuple[Session, bool]:
+        """
+        Create/load session and run the CLI instance.
+
+        Returns:
+            The session and whether the run succeeded.
+        """
         if session_id is not None:
             session = await Session.find(work_dir, session_id)
             if session is None:
@@ -508,77 +493,240 @@ def kimi(
             max_steps_per_turn=max_steps_per_turn,
             max_retries_per_step=max_retries_per_step,
             max_ralph_iterations=max_ralph_iterations,
-            flow=flow,
         )
-        match ui:
-            case "shell":
-                succeeded = await instance.run_shell(prompt)
-            case "print":
-                succeeded = await instance.run_print(
-                    input_format or "text",
-                    output_format or "text",
-                    prompt,
-                    final_only=final_message_only,
-                )
-            case "acp":
-                if prompt is not None:
-                    logger.warning("ACP server ignores prompt argument")
-                await instance.run_acp()
-                succeeded = True
-            case "wire":
-                if prompt is not None:
-                    logger.warning("Wire server ignores prompt argument")
-                await instance.run_wire_stdio()
-                succeeded = True
-
-        if succeeded:
-            metadata = load_metadata()
-
-            # Update work_dir metadata with last session
-            work_dir_meta = metadata.get_work_dir_meta(session.work_dir)
-
-            if work_dir_meta is None:
-                logger.warning(
-                    "Work dir metadata missing when marking last session, recreating: {work_dir}",
-                    work_dir=session.work_dir,
-                )
-                work_dir_meta = metadata.new_work_dir_meta(session.work_dir)
-
-            if session.is_empty():
-                logger.info(
-                    "Session {session_id} has empty context, removing it",
-                    session_id=session.id,
-                )
-                await session.delete()
-                if work_dir_meta.last_session_id == session.id:
-                    work_dir_meta.last_session_id = None
-            else:
-                work_dir_meta.last_session_id = session.id
-
-            save_metadata(metadata)
-
-        return succeeded
-
-    while True:
+        # Install stderr redirection only after initialization succeeded, so runtime
+        # stderr noise is captured into logs without hiding startup failures.
+        redirect_stderr_to_logger()
         try:
-            succeeded = asyncio.run(_run(session_id))
-            session_id = None
-            if not succeeded:
-                raise typer.Exit(code=1)
-            break
+            match ui:
+                case "shell":
+                    succeeded = await instance.run_shell(prompt)
+                case "print":
+                    succeeded = await instance.run_print(
+                        input_format or "text",
+                        output_format or "text",
+                        prompt,
+                        final_only=final_message_only,
+                    )
+                case "acp":
+                    if prompt is not None:
+                        logger.warning("ACP server ignores prompt argument")
+                    await instance.run_acp()
+                    succeeded = True
+                case "wire":
+                    if prompt is not None:
+                        logger.warning("Wire server ignores prompt argument")
+                    await instance.run_wire_stdio()
+                    succeeded = True
         except Reload as e:
-            session_id = e.session_id
-            continue
+            if e.session_id is None:
+                raise Reload(session_id=session.id) from e
+            raise
+
+        return session, succeeded
+
+    async def _post_run(last_session: Session, succeeded: bool) -> None:
+        if not succeeded:
+            return
+
+        metadata = load_metadata()
+
+        # Update work_dir metadata with last session
+        work_dir_meta = metadata.get_work_dir_meta(last_session.work_dir)
+
+        if work_dir_meta is None:
+            logger.warning(
+                "Work dir metadata missing when marking last session, recreating: {work_dir}",
+                work_dir=last_session.work_dir,
+            )
+            work_dir_meta = metadata.new_work_dir_meta(last_session.work_dir)
+
+        if last_session.is_empty():
+            logger.info(
+                "Session {session_id} has empty context, removing it",
+                session_id=last_session.id,
+            )
+            await last_session.delete()
+            if work_dir_meta.last_session_id == last_session.id:
+                work_dir_meta.last_session_id = None
+        else:
+            work_dir_meta.last_session_id = last_session.id
+
+        save_metadata(metadata)
+
+    async def _reload_loop(session_id: str | None) -> bool:
+        """
+        Returns:
+            True if should switch to web interface, False otherwise.
+        """
+        while True:
+            try:
+                last_session, succeeded = await _run(session_id)
+                break
+            except Reload as e:
+                session_id = e.session_id
+                continue
+            except SwitchToWeb as e:
+                if e.session_id is not None:
+                    session = await Session.find(work_dir, e.session_id)
+                    if session is not None:
+                        await _post_run(session, True)
+                return True
+        await _post_run(last_session, succeeded)
+        return False
+
+    try:
+        switch_to_web = asyncio.run(_reload_loop(session_id))
+    except (typer.BadParameter, typer.Exit):
+        # Let Typer/Click format these errors (rich panel + correct exit code).
+        raise
+    except Exception as exc:
+        import click
+
+        if isinstance(exc, click.ClickException):
+            # ClickException includes the errors Typer knows how to render; don't
+            # wrap them, or we'd lose the standard error UI and exit codes.
+            raise
+        logger.exception("Fatal error when running CLI")
+        if debug:
+            import traceback
+
+            # In debug mode, show full traceback for quick diagnosis.
+            _emit_fatal_error(traceback.format_exc())
+        else:
+            from kimi_cli.share import get_share_dir
+
+            log_path = get_share_dir() / "logs" / "kimi.log"
+            # In non-debug mode, print a concise error and point users to logs.
+            _emit_fatal_error(f"{exc}\nSee logs: {log_path}")
+        raise typer.Exit(code=1) from exc
+    if switch_to_web:
+        from kimi_cli.utils.logging import restore_stderr
+
+        restore_stderr()
+
+        # Restore default SIGINT handler and terminal state after the shell's
+        # asyncio.run() to ensure Ctrl+C works in the uvicorn web server.
+        import signal
+
+        signal.signal(signal.SIGINT, signal.default_int_handler)
+
+        from kimi_cli.utils.term import ensure_tty_sane
+
+        ensure_tty_sane()
+
+        from kimi_cli.web.app import run_web_server
+
+        run_web_server(open_browser=True)
 
 
 cli.add_typer(info_cli, name="info")
+
+
+@cli.command()
+def login(
+    json: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit OAuth events as JSON lines.",
+    ),
+) -> None:
+    """Login to your Kimi account."""
+    from rich.console import Console
+    from rich.status import Status
+
+    from kimi_cli.auth.oauth import login_kimi_code
+    from kimi_cli.config import load_config
+
+    async def _run() -> bool:
+        if json:
+            ok = True
+            async for event in login_kimi_code(load_config()):
+                typer.echo(event.json)
+                if event.type == "error":
+                    ok = False
+            return ok
+
+        console = Console()
+        ok = True
+        status: Status | None = None
+        try:
+            async for event in login_kimi_code(load_config()):
+                if event.type == "waiting":
+                    if status is None:
+                        status = console.status("Waiting for user authorization...")
+                        status.start()
+                    continue
+                if status is not None:
+                    status.stop()
+                    status = None
+                match event.type:
+                    case "error":
+                        style = "red"
+                    case "success":
+                        style = "green"
+                    case _:
+                        style = None
+                console.print(event.message, markup=False, style=style)
+                if event.type == "error":
+                    ok = False
+        finally:
+            if status is not None:
+                status.stop()
+        return ok
+
+    ok = asyncio.run(_run())
+    if not ok:
+        raise typer.Exit(code=1)
+
+
+@cli.command()
+def logout(
+    json: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit OAuth events as JSON lines.",
+    ),
+) -> None:
+    """Logout from your Kimi account."""
+    from rich.console import Console
+
+    from kimi_cli.auth.oauth import logout_kimi_code
+    from kimi_cli.config import load_config
+
+    async def _run() -> bool:
+        ok = True
+        if json:
+            async for event in logout_kimi_code(load_config()):
+                typer.echo(event.json)
+                if event.type == "error":
+                    ok = False
+            return ok
+
+        console = Console()
+        async for event in logout_kimi_code(load_config()):
+            match event.type:
+                case "error":
+                    style = "red"
+                case "success":
+                    style = "green"
+                case _:
+                    style = None
+            console.print(event.message, markup=False, style=style)
+            if event.type == "error":
+                ok = False
+        return ok
+
+    ok = asyncio.run(_run())
+    if not ok:
+        raise typer.Exit(code=1)
 
 
 @cli.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def term(
     ctx: typer.Context,
 ) -> None:
-    """Run Toad TUI backed by Kimi CLI ACP server."""
+    """Run Toad TUI backed by Kimi Code CLI ACP server."""
     from .toad import run_term
 
     run_term(ctx)
@@ -586,13 +734,31 @@ def term(
 
 @cli.command()
 def acp():
-    """Run Kimi CLI ACP server."""
+    """Run Kimi Code CLI ACP server."""
     from kimi_cli.acp import acp_main
 
     acp_main()
 
 
+@cli.command(name="__web-worker", hidden=True)
+def web_worker(session_id: str) -> None:
+    """Run web worker subprocess (internal)."""
+    from uuid import UUID
+
+    from kimi_cli.app import enable_logging
+    from kimi_cli.web.runner.worker import run_worker
+
+    try:
+        parsed_session_id = UUID(session_id)
+    except ValueError as exc:
+        raise typer.BadParameter(f"Invalid session ID: {session_id}") from exc
+
+    enable_logging(debug=False)
+    asyncio.run(run_worker(parsed_session_id))
+
+
 cli.add_typer(mcp_cli, name="mcp")
+cli.add_typer(web_cli, name="web")
 
 
 if __name__ == "__main__":

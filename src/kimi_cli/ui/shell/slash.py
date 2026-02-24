@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING, Any
 
 from prompt_toolkit.shortcuts.choice_input import ChoiceInput
 
-from kimi_cli.cli import Reload
+from kimi_cli.auth.platforms import get_platform_name_for_provider, refresh_managed_models
+from kimi_cli.cli import Reload, SwitchToWeb
 from kimi_cli.config import load_config, save_config
 from kimi_cli.exception import ConfigError
-from kimi_cli.platforms import get_platform_name_for_provider, refresh_managed_models
 from kimi_cli.session import Session
 from kimi_cli.soul.kimisoul import KimiSoul
 from kimi_cli.ui.shell.console import console
@@ -92,7 +92,7 @@ def help(app: Shell, args: str):
     renderables.append(
         BulletColumns(
             Text(
-                "Sure, Kimi CLI is ready to help! "
+                "Sure, Kimi is ready to help! "
                 "Just send me messages and I will help you get things done!"
             ),
         )
@@ -149,7 +149,7 @@ async def model(app: Shell, args: str):
     await refresh_managed_models(config)
 
     if not config.models:
-        console.print('[yellow]No models configured, send "/setup" to configure.[/yellow]')
+        console.print('[yellow]No models configured, send "/login" to login.[/yellow]')
         return
 
     if not config.is_from_default_location:
@@ -292,7 +292,7 @@ def changelog(app: Shell, args: str):
 @registry.command
 @shell_mode_registry.command
 def feedback(app: Shell, args: str):
-    """Submit feedback to make Kimi CLI better"""
+    """Submit feedback to make Kimi Code CLI better"""
     import webbrowser
 
     ISSUE_URL = "https://github.com/MoonshotAI/kimi-cli/issues"
@@ -352,6 +352,14 @@ async def list_sessions(app: Shell, args: str):
 
     console.print(f"[green]Switching to session {selection}...[/green]")
     raise Reload(session_id=selection)
+
+
+@registry.command
+def web(app: Shell, args: str):
+    """Open Kimi Code Web UI in browser"""
+    soul = _ensure_kimi_soul(app)
+    session_id = soul.runtime.session.id if soul else None
+    raise SwitchToWeb(session_id=session_id)
 
 
 @registry.command
@@ -415,6 +423,7 @@ async def mcp(app: Shell, args: str):
 
 from . import (  # noqa: E402
     debug,  # noqa: F401 # type: ignore[reportUnusedImport]
+    oauth,  # noqa: F401 # type: ignore[reportUnusedImport]
     setup,  # noqa: F401 # type: ignore[reportUnusedImport]
     update,  # noqa: F401 # type: ignore[reportUnusedImport]
     usage,  # noqa: F401 # type: ignore[reportUnusedImport]

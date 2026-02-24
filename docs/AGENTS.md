@@ -56,7 +56,7 @@ Term mapping (Chinese <-> English, and proper noun handling):
 | Thinking 模式 | thinking mode | yes | no |
 | MCP | MCP | yes | yes |
 | ACP | ACP | yes | yes |
-| Kimi CLI | Kimi CLI | yes | yes |
+| Kimi Code CLI | Kimi Code CLI | yes | yes |
 | Agent Skills | Agent Skills | yes | yes |
 | Skill | skill | yes | no |
 | 系统提示词 | system prompt | no | no |
@@ -100,6 +100,18 @@ JetBrains IDE terminology (Chinese UI translations):
   - ✗ 详见\[配置文件\](./config.md)。
 - **Full-width punctuation**: Use full-width punctuation in Chinese text: `，。；：？！（）` not `, . ; : ? ! ( )`.
 - **Code block language**: Always specify language for fenced code blocks (e.g., ` ```sh `, ` ```toml `, ` ```json `). Exception: natural language examples (user prompts) may omit the language.
+- **Callout titles**: Use short category titles for callout blocks (`::: tip`, `::: warning`, `::: info`, `::: danger`). Put the detailed description in the block content, not the title.
+  - Chinese: use `提示` for tip, `注意` for warning, `说明` for info, `警告` for danger.
+  - English: use no title or short words like `Note` for warning.
+  - ✓ `::: tip 提示` + content starting with the key point
+  - ✓ `::: warning 注意` + content `\`KIMI_SHARE_DIR\` 不影响 Skills 的搜索路径。...`
+  - ✗ `::: warning 不影响 Skills` (title too long, should be in content)
+  - ✗ `::: tip Skills 路径独立于 KIMI_SHARE_DIR` (title too long)
+- **Version info blocks**: For version change callouts, use `::: info` with a category title (Added/Changed/Removed in English; 新增/变更/移除 in Chinese). The content should be a complete sentence.
+  - ✓ `::: info 新增` + content `新增于 Wire 1.2。`
+  - ✗ `::: info 新增于 Wire 1.2` (title too long)
+  - ✓ `::: info Changed` + content `Renamed in Wire 1.1. ...`
+  - ✗ `::: info Renamed in Wire 1.1` (title too long)
 
 ## Writing style
 
@@ -143,9 +155,9 @@ Outline prompt:
 ```markdown
 ## Install and upgrade
 
-Kimi CLI requires Python 3.12+. We recommend using uv for installation and management.
+Kimi Code CLI requires Python 3.12+. We recommend using uv for installation and management.
 
-If you haven't installed uv yet, please refer to the uv installation docs first. Install Kimi CLI:
+If you haven't installed uv yet, please refer to the uv installation docs first. Install Kimi Code CLI:
 
 (code block)
 

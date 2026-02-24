@@ -21,7 +21,7 @@ from kimi_cli.tools import extract_key_argument
 from kimi_cli.utils.logging import logger
 from kimi_cli.wire.types import (
     ApprovalRequest,
-    ApprovalRequestResolved,
+    ApprovalResponse,
     CompactionBegin,
     CompactionEnd,
     ContentPart,
@@ -34,8 +34,10 @@ from kimi_cli.wire.types import (
     TodoDisplayBlock,
     ToolCall,
     ToolCallPart,
+    ToolCallRequest,
     ToolResult,
     TurnBegin,
+    TurnEnd,
 )
 
 _current_turn_id = ContextVar[str | None]("current_turn_id", default=None)
@@ -131,7 +133,7 @@ class ACPSession:
 
     @property
     def cli(self) -> KimiCLI:
-        """The Kimi CLI instance bound to this ACP session."""
+        """The Kimi Code CLI instance bound to this ACP session."""
         return self._cli
 
     async def prompt(self, prompt: list[ACPContentBlock]) -> acp.PromptResponse:
@@ -144,6 +146,8 @@ class ACPSession:
             async for msg in self._cli.run(user_input, self._turn_state.cancel_event):
                 match msg:
                     case TurnBegin():
+                        pass
+                    case TurnEnd():
                         pass
                     case StepBegin():
                         pass
@@ -168,12 +172,14 @@ class ACPSession:
                         await self._send_tool_call_part(msg)
                     case ToolResult():
                         await self._send_tool_result(msg)
-                    case SubagentEvent():
+                    case ApprovalResponse():
                         pass
-                    case ApprovalRequestResolved():
+                    case SubagentEvent():
                         pass
                     case ApprovalRequest():
                         await self._handle_approval_request(msg)
+                    case ToolCallRequest():
+                        logger.warning("Unexpected ToolCallRequest in ACP session: {msg}", msg=msg)
         except LLMNotSet as e:
             logger.exception("LLM not set:")
             raise acp.RequestError.auth_required() from e
